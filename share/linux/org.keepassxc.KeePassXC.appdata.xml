@@ -50,6 +50,92 @@
     </screenshots>
 
     <releases>
+        <release version="2.6.0" date="2020-04-01">
+            <description>
+                <ul><li>TBD</li></ul>
+            </description>
+        </release>
+        <release version="2.5.4" date="2020-04-09">
+            <description>
+                <ul>
+                    <li>Return keyboard focus after saving database edits [#4287]</li>
+                    <li>Windows: Use bare minimum settings in portable version [#4131]</li>
+                    <li>Windows: Use SHA256 code signing [#4129]</li>
+                    <li>macOS: Fix code signing incompatibility in latest macOS release [#4564]</li>
+                </ul>
+            </description>
+        </release>
+        <release version="2.5.3" date="2020-01-19">
+            <description>
+                <ul>
+                    <li>Fix a possible database lockout when removing a YubiKey from a KDBX 3.1 database [#4147]</li>
+                    <li>Fix crash if Auto-Type is performed on a new entry [#4150]</li>
+                    <li>Fix crash when all entries are deleted from a group [#4156]</li>
+                    <li>Improve the reliability of clipboard clearing on Gnome [#4165]</li>
+                    <li>Do not check cmd:// URLs for valid URL syntax anymore [#4172]</li>
+                    <li>Prevent unnecessary merges for databases on network shares [#4153]</li>
+                    <li>Browser: Prevent native messaging proxy from blocking application shutdown [#4155]</li>
+                    <li>Browser: Improve website URL matching [#4134, #4177]</li>
+                </ul>
+            </description>
+        </release>
+        <release version="2.5.2" date="2020-01-04">
+            <description>
+                <ul>
+                    <li>Browser: Show UI warning when entering invalid URLs [#3912]</li>
+                    <li>Browser: Option to use an entry only for HTTP auth [#3927]</li>
+                    <li>Disable the user interface when merging or saving the database [#3991]</li>
+                    <li>Ability to hide protected attribute after reveal [#3877]</li>
+                    <li>Remove mention of "snaps" in Windows and macOS [#3879]</li>
+                    <li>CLI: Merge parameter for source database key file (--key-file-from) [#3961]</li>
+                    <li>Improve GUI tests reliability on Hi-DPI displays [#4075]</li>
+                    <li>Disable deprecation warnings to allow building with Qt 5.14+ [#4075]</li>
+                    <li>OPVault: Use 'otp' attribute for TOTP field imports [#4075]</li>
+                    <li>Fix crashes when saving a database to cloud storage [#3991]</li>
+                    <li>Fix crash when pressing enter twice while opening database [#3885]</li>
+                    <li>Fix handling of HTML when displayed in the entry preview panel [#3910]</li>
+                    <li>Fix start minimized to tray on Linux [#3899]</li>
+                    <li>Fix Auto Open with key file only databases [#4075]</li>
+                    <li>Fix escape key closing the standalone password generator [#3892]</li>
+                    <li>macOS: Fix monospace font usage in password field and notes [#4075]</li>
+                    <li>macOS: Fix building on macOS 10.9 to 10.11 [#3946]</li>
+                    <li>Fix TOTP setup dialog not closing on database lock [#4075]</li>
+                    <li>Browser: Fix condition where additional URLs are ignored [#4033]</li>
+                    <li>Browser: Fix subdomain matching to return only relevant site entries [#3854]</li>
+                    <li>Secret Service: Fix multiple crashes and incompatibilities [#3871, #4009, #4074]</li>
+                    <li>Secret Service: Fix searching of entries [#4008, #4036]</li>
+                    <li>Secret Service: Fix behavior when exposed group is recycled [#3914]</li>
+                    <li>CLI: Release the database instance before exiting interactive mode [#3889]</li>
+                    <li>Fix (most) memory leaks in tests [#3922]</li>
+                </ul>
+            </description>
+        </release>
+        <release version="2.5.1" date="2019-11-11">
+            <description>
+                <ul>
+                    <li>Add programmatic use of the EntrySearcher [#3760]</li>
+                    <li>Explicitly clear database memory upon locking even if the object is not deleted immediately [#3824]</li>
+                    <li>macOS: Add ability to perform notarization of built package [#3827]</li>
+                    <li>Reduce file hash checking to every 30 seconds to correct performance issues [#3724]</li>
+                    <li>Correct formatting of notes in entry preview widget [#3727]</li>
+                    <li>Improve performance and UX of database statistics page [#3780]</li>
+                    <li>Improve interface for key file selection to discourage use of the database file [#3807]</li>
+                    <li>Hide Auto-Type sequences column when not needed [#3794]</li>
+                    <li>macOS: Revert back to using Carbon API for hotkey detection [#3794]</li>
+                    <li>CLI: Do not show protected fields by default [#3710]</li>
+                    <li>Secret Service: Correct issues interfacing with various applications [#3761]</li>
+                    <li>Fix building without additional features [#3693]</li>
+                    <li>Fix handling TOTP secret keys that require padding [#3764]</li>
+                    <li>Fix database unlock dialog password field focus [#3764]</li>
+                    <li>Correctly label open databases as locked on launch [#3764]</li>
+                    <li>Prevent infinite recursion when two databases AutoOpen each other [#3764]</li>
+                    <li>Browser: Fix incorrect matching of invalid URLs [#3759]</li>
+                    <li>Properly stylize the application name on Linux [#3775]</li>
+                    <li>Show application icon on Plasma Wayland sessions [#3777]</li>
+                    <li>macOS: Check for Auto-Type permissions on use instead of at launch [#3794]</li>
+                </ul>
+            </description>
+        </release>
         <release version="2.5.0" date="2019-10-26">
             <description>
                 <ul>

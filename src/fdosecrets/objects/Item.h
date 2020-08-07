@@ -67,15 +67,6 @@ namespace FdoSecrets
     public:
         static const QSet<QString> ReadOnlyAttributes;
 
-        /**
-         * Due to the limitation in EntrySearcher, custom attr key cannot contain ':',
-         * Thus we encode the key when saving and decode it when returning.
-         * @param key
-         * @return
-         */
-        static QString encodeAttributeKey(const QString& key);
-        static QString decodeAttributeKey(const QString& key);
-
         DBusReturn<void> setProperties(const QVariantMap& properties);
 
         Entry* backend() const;
@@ -87,6 +78,14 @@ namespace FdoSecrets
          * @return the entry path
          */
         QString path() const;
+
+        /**
+         * If the containing db does not have recycle bin enabled,
+         * or the entry is already in the recycle bin (not possible for item, though),
+         * the delete is permanent
+         * @return true if delete is permanent
+         */
+        bool isDeletePermanent() const;
 
     public slots:
         void doDelete();
