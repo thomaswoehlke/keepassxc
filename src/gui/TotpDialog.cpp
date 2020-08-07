@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2017 Weslly Honorato <﻿weslly@protonmail.com>
+ *  Copyright (C) 2017 Weslly Honorato <weslly@protonmail.com>
  *  Copyright (C) 2017 KeePassXC Team <team@keepassxc.org>
  *
  *  This program is free software: you can redistribute it and/or modify
@@ -42,7 +42,7 @@ TotpDialog::TotpDialog(QWidget* parent, Entry* entry)
     resetCounter();
     updateProgressBar();
 
-    connect(parent, SIGNAL(lockedDatabase()), SLOT(close()));
+    connect(parent, SIGNAL(databaseLocked()), SLOT(close()));
     connect(&m_totpUpdateTimer, SIGNAL(timeout()), this, SLOT(updateProgressBar()));
     connect(&m_totpUpdateTimer, SIGNAL(timeout()), this, SLOT(updateSeconds()));
     m_totpUpdateTimer.start(m_step * 10);
@@ -65,10 +65,10 @@ TotpDialog::~TotpDialog()
 void TotpDialog::copyToClipboard()
 {
     clipboard()->setText(m_entry->totp());
-    if (config()->get("HideWindowOnCopy").toBool()) {
-        if (config()->get("MinimizeOnCopy").toBool()) {
-            getMainWindow()->showMinimized();
-        } else if (config()->get("DropToBackgroundOnCopy").toBool()) {
+    if (config()->get(Config::HideWindowOnCopy).toBool()) {
+        if (config()->get(Config::MinimizeOnCopy).toBool()) {
+            getMainWindow()->minimizeOrHide();
+        } else if (config()->get(Config::DropToBackgroundOnCopy).toBool()) {
             getMainWindow()->lower();
             window()->lower();
         }

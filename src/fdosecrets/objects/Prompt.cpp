@@ -65,7 +65,7 @@ namespace FdoSecrets
 
     DBusReturn<void> PromptBase::dismiss()
     {
-        emit completed(true, {});
+        emit completed(true, "");
         return {};
     }
 
@@ -93,9 +93,9 @@ namespace FdoSecrets
 
         MessageBox::OverrideParent override(findWindow(windowId));
         // only need to delete in backend, collection will react itself.
-        service()->doCloseDatabase(m_collection->backend());
+        auto accepted = service()->doCloseDatabase(m_collection->backend());
 
-        emit completed(false, {});
+        emit completed(!accepted, "");
 
         return {};
     }
@@ -125,8 +125,14 @@ namespace FdoSecrets
         }
 
         emit collectionCreated(coll);
-        emit completed(false, coll->objectPath().path());
+        emit completed(false, QVariant::fromValue(coll->objectPath()));
 
+        return {};
+    }
+
+    DBusReturn<void> CreateCollectionPrompt::dismiss()
+    {
+        emit completed(true, QVariant::fromValue(QDBusObjectPath{"/"}));
         return {};
     }
 
@@ -153,16 +159,23 @@ namespace FdoSecrets
 
         MessageBox::OverrideParent override(findWindow(windowId));
 
-        QList<QDBusObjectPath> locked;
         for (const auto& c : asConst(m_collections)) {
             if (c) {
-                c->doLock();
-                locked << c->objectPath();
+                if (!c->doLock()) {
+                    return dismiss();
+                }
+                m_locked << c->objectPath();
             }
         }
 
-        emit completed(false, QVariant::fromValue(locked));
+        emit completed(false, QVariant::fromValue(m_locked));
 
+        return {};
+    }
+
+    DBusReturn<void> LockCollectionsPrompt::dismiss()
+    {
+        emit completed(true, QVariant::fromValue(m_locked));
         return {};
     }
 
@@ -189,16 +202,47 @@ namespace FdoSecrets
 
         MessageBox::OverrideParent override(findWindow(windowId));
 
-        QList<QDBusObjectPath> unlocked;
         for (const auto& c : asConst(m_collections)) {
             if (c) {
+                // doUnlock is nonblocking
+                connect(c, &Collection::doneUnlockCollection, this, &UnlockCollectionsPrompt::collectionUnlockFinished);
                 c->doUnlock();
-                unlocked << c->objectPath();
             }
         }
 
-        emit completed(false, QVariant::fromValue(unlocked));
+        return {};
+    }
 
+    void UnlockCollectionsPrompt::collectionUnlockFinished(bool accepted)
+    {
+        auto coll = qobject_cast<Collection*>(sender());
+        if (!coll) {
+            return;
+        }
+
+        if (!m_collections.contains(coll)) {
+            // should not happen
+            coll->disconnect(this);
+            return;
+        }
+
+        // one shot
+        coll->disconnect(this);
+
+        if (accepted) {
+            m_unlocked << coll->objectPath();
+        } else {
+            m_numRejected += 1;
+        }
+
+        // if we've get all
+        if (m_numRejected + m_unlocked.size() == m_collections.size()) {
+            emit completed(m_unlocked.isEmpty(), QVariant::fromValue(m_unlocked));
+        }
+    }
+    DBusReturn<void> UnlockCollectionsPrompt::dismiss()
+    {
+        emit completed(true, QVariant::fromValue(m_unlocked));
         return {};
     }
 
@@ -225,14 +269,18 @@ namespace FdoSecrets
         // delete item's backend. Item will be notified after the backend is deleted.
         if (m_item) {
             if (FdoSecrets::settings()->noConfirmDeleteItem()) {
-                MessageBox::setNextAnswer(MessageBox::Move);
+                // based on permanent or not, different button is used
+                if (m_item->isDeletePermanent()) {
+                    MessageBox::setNextAnswer(MessageBox::Delete);
+                } else {
+                    MessageBox::setNextAnswer(MessageBox::Move);
+                }
             }
             m_item->collection()->doDeleteEntries({m_item->backend()});
         }
 
-        emit completed(false, {});
+        emit completed(false, "");
 
         return {};
     }
-
 } // namespace FdoSecrets

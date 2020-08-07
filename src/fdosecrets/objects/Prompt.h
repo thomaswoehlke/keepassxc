@@ -73,6 +73,7 @@ namespace FdoSecrets
         explicit CreateCollectionPrompt(Service* parent);
 
         DBusReturn<void> prompt(const QString& windowId) override;
+        DBusReturn<void> dismiss() override;
 
     signals:
         void collectionCreated(Collection* coll);
@@ -85,9 +86,11 @@ namespace FdoSecrets
         explicit LockCollectionsPrompt(Service* parent, const QList<Collection*>& colls);
 
         DBusReturn<void> prompt(const QString& windowId) override;
+        DBusReturn<void> dismiss() override;
 
     private:
         QList<QPointer<Collection>> m_collections;
+        QList<QDBusObjectPath> m_locked;
     };
 
     class UnlockCollectionsPrompt : public PromptBase
@@ -97,9 +100,15 @@ namespace FdoSecrets
         explicit UnlockCollectionsPrompt(Service* parent, const QList<Collection*>& coll);
 
         DBusReturn<void> prompt(const QString& windowId) override;
+        DBusReturn<void> dismiss() override;
+
+    private slots:
+        void collectionUnlockFinished(bool accepted);
 
     private:
         QList<QPointer<Collection>> m_collections;
+        QList<QDBusObjectPath> m_unlocked;
+        int m_numRejected = 0;
     };
 
     class Item;
