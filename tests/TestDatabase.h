@@ -29,11 +29,13 @@ private slots:
     void initTestCase();
     void testOpen();
     void testSave();
+    void testSaveAs();
     void testSignals();
     void testEmptyRecycleBinOnDisabled();
     void testEmptyRecycleBinOnNotCreated();
     void testEmptyRecycleBinOnEmpty();
     void testEmptyRecycleBinWithHierarchicalData();
+    void testCustomIcons();
 };
 
 #endif // KEEPASSX_TESTDATABASE_H

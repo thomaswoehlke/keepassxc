@@ -1,6 +1,6 @@
 /*
  *  Copyright (C) 2010 Felix Geyer <debfx@fobos.de>
- *  Copyright (C) 2017 KeePassXC Team <team@keepassxc.org>
+ *  Copyright (C) 2021 KeePassXC Team <team@keepassxc.org>
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,10 +20,10 @@
 #define KEEPASSX_EDITENTRYWIDGET_H
 
 #include <QButtonGroup>
+#include <QCheckBox>
 #include <QCompleter>
-#include <QModelIndex>
 #include <QPointer>
-#include <QScopedPointer>
+#include <QTimer>
 
 #include "config-keepassx.h"
 #include "gui/EditWidget.h"
@@ -36,10 +36,12 @@ class EditWidgetIcons;
 class EditWidgetProperties;
 class Entry;
 class EntryAttributes;
+class EntryAttachments;
 class EntryAttributesModel;
 class EntryHistoryModel;
 class QButtonGroup;
 class QMenu;
+class QScrollArea;
 class QSortFilterProxyModel;
 class QStringListModel;
 #ifdef WITH_XC_SSHAGENT
@@ -75,6 +77,19 @@ public:
     Entry* currentEntry() const;
     void clear();
 
+    enum class Page
+    {
+        Main,
+        Advanced,
+        Icon,
+        AutoType,
+        Browser,
+        SSHAgent,
+        Properties,
+        History
+    };
+    bool switchToPage(Page page);
+
 signals:
     void editFinished(bool accepted);
     void historyEntryActivated(Entry* entry);
@@ -83,8 +98,6 @@ private slots:
     void acceptEntry();
     bool commitEntry();
     void cancel();
-    void togglePasswordGeneratorButton(bool checked);
-    void setGeneratedPassword(const QString& password);
 #ifdef WITH_XC_NETWORKING
     void updateFaviconButtonEnable(const QString& url);
 #endif
@@ -93,7 +106,7 @@ private slots:
     void removeCurrentAttribute();
     void updateCurrentAttribute();
     void protectCurrentAttribute(bool state);
-    void revealCurrentAttribute();
+    void toggleCurrentAttributeVisibility();
     void updateAutoTypeEnabled();
     void openAutotypeHelp();
     void insertAutoTypeAssoc();
@@ -112,15 +125,19 @@ private slots:
     void toggleHideNotes(bool visible);
     void pickColor();
 #ifdef WITH_XC_SSHAGENT
+    void toKeeAgentSettings(KeeAgentSettings& settings) const;
+    void setSSHAgentSettings();
     void updateSSHAgent();
     void updateSSHAgentAttachment();
     void updateSSHAgentAttachments();
     void updateSSHAgentKeyInfo();
+    void updateTotp();
     void browsePrivateKey();
     void addKeyToAgent();
     void removeKeyFromAgent();
     void decryptPrivateKey();
     void copyPublicKey();
+    void generatePrivateKey();
 #endif
 #ifdef WITH_XC_BROWSER
     void updateBrowserModified();
@@ -129,6 +146,7 @@ private slots:
     void removeCurrentURL();
     void editCurrentURL();
     void updateCurrentURL();
+    void entryURLEdited(const QString& url);
 #endif
 
 private:
@@ -147,16 +165,17 @@ private:
     void setupEntryUpdate();
     void setupColorButton(bool foreground, const QColor& color);
 
-    bool passwordsEqual();
     void setForms(Entry* entry, bool restore = false);
     QMenu* createPresetsMenu();
     void updateEntryData(Entry* entry) const;
+    void updateBrowserIntegrationCheckbox(QCheckBox* checkBox, bool enabled, bool value, const QString& option);
 #ifdef WITH_XC_SSHAGENT
     bool getOpenSSHKey(OpenSSHKey& key, bool decrypt = false);
-    void saveSSHAgentConfig();
 #endif
 
     void displayAttribute(QModelIndex index, bool showProtected);
+
+    QWidget* widgetForPage(Page page) const;
 
     QPointer<Entry> m_entry;
     QSharedPointer<Database> m_db;
@@ -164,8 +183,8 @@ private:
     bool m_create;
     bool m_history;
 #ifdef WITH_XC_SSHAGENT
-    bool m_sshAgentEnabled;
     KeeAgentSettings m_sshAgentSettings;
+    QString m_pendingPrivateKey;
 #endif
     const QScopedPointer<Ui::EditEntryWidgetMain> m_mainUi;
     const QScopedPointer<Ui::EditEntryWidgetAdvanced> m_advancedUi;
@@ -173,9 +192,10 @@ private:
     const QScopedPointer<Ui::EditEntryWidgetSSHAgent> m_sshAgentUi;
     const QScopedPointer<Ui::EditEntryWidgetHistory> m_historyUi;
     const QScopedPointer<Ui::EditEntryWidgetBrowser> m_browserUi;
+    const QScopedPointer<EntryAttachments> m_attachments;
     const QScopedPointer<CustomData> m_customData;
 
-    QWidget* const m_mainWidget;
+    QScrollArea* const m_mainWidget;
     QWidget* const m_advancedWidget;
     EditWidgetIcons* const m_iconsWidget;
     QWidget* const m_autoTypeWidget;
@@ -200,6 +220,7 @@ private:
     QButtonGroup* const m_autoTypeWindowSequenceGroup;
     QCompleter* const m_usernameCompleter;
     QStringListModel* const m_usernameCompleterModel;
+    QTimer m_entryModifiedTimer;
 
     Q_DISABLE_COPY(EditEntryWidget)
 };

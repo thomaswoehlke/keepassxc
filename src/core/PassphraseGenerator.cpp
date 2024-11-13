@@ -18,12 +18,14 @@
 #include "PassphraseGenerator.h"
 
 #include <QFile>
+#include <QSet>
 #include <QTextStream>
 #include <cmath>
 
-#include "core/FilePath.h"
+#include "core/Resources.h"
 #include "crypto/Random.h"
 
+const int PassphraseGenerator::DefaultWordCount = 7;
 const char* PassphraseGenerator::DefaultSeparator = " ";
 const char* PassphraseGenerator::DefaultWordList = "eff_large.wordlist";
 
@@ -60,27 +62,50 @@ void PassphraseGenerator::setWordCase(PassphraseWordCase wordCase)
 void PassphraseGenerator::setWordList(const QString& path)
 {
     m_wordlist.clear();
+    // Initially load wordlist into a set to avoid duplicates
+    QSet<QString> wordset;
 
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        qWarning("Couldn't load passphrase wordlist.");
+        qWarning("Couldn't load passphrase wordlist: %s", qPrintable(path));
         return;
     }
 
     QTextStream in(&file);
-    while (!in.atEnd()) {
-        m_wordlist.append(in.readLine());
+    QString line = in.readLine();
+    bool isSigned = line.startsWith("-----BEGIN PGP SIGNED MESSAGE-----");
+    if (isSigned) {
+        while (!line.isNull() && !line.trimmed().isEmpty()) {
+            line = in.readLine();
+        }
+    }
+    QRegExp rx("^[0-9]+(-[0-9]+)*\\s+([^\\s]+)$");
+    while (!line.isNull()) {
+        if (isSigned && line.startsWith("-----BEGIN PGP SIGNATURE-----")) {
+            break;
+        }
+        // Handle dash-escaped lines (if the wordlist is signed)
+        if (isSigned && line.startsWith("- ")) {
+            line.remove(0, 2);
+        }
+        line = line.trimmed();
+        line.replace(rx, "\\2");
+        if (!line.isEmpty()) {
+            wordset.insert(line);
+        }
+        line = in.readLine();
     }
 
-    if (m_wordlist.size() < 4000) {
-        qWarning("Wordlist too short!");
-        return;
+    m_wordlist = wordset.toList();
+
+    if (m_wordlist.size() < m_minimum_wordlist_length) {
+        qWarning("Wordlist is less than minimum acceptable size: %s", qPrintable(path));
     }
 }
 
 void PassphraseGenerator::setDefaultWordList()
 {
-    const QString path = filePath()->wordlistPath(PassphraseGenerator::DefaultWordList);
+    const QString path = resources()->wordlistPath(PassphraseGenerator::DefaultWordList);
     setWordList(path);
 }
 
@@ -91,18 +116,15 @@ void PassphraseGenerator::setWordSeparator(const QString& separator)
 
 QString PassphraseGenerator::generatePassphrase() const
 {
-    QString tmpWord;
-    Q_ASSERT(isValid());
-
     // In case there was an error loading the wordlist
-    if (m_wordlist.length() == 0) {
-        return QString();
+    if (!isValid() || m_wordlist.empty()) {
+        return {};
     }
 
     QStringList words;
     for (int i = 0; i < m_wordCount; ++i) {
-        int wordIndex = randomGen()->randomUInt(static_cast<quint32>(m_wordlist.length()));
-        tmpWord = m_wordlist.at(wordIndex);
+        int wordIndex = randomGen()->randomUInt(static_cast<quint32>(m_wordlist.size()));
+        auto tmpWord = m_wordlist.at(wordIndex);
 
         // convert case
         switch (m_wordCase) {
@@ -113,7 +135,6 @@ QString PassphraseGenerator::generatePassphrase() const
             tmpWord = tmpWord.replace(0, 1, tmpWord.left(1).toUpper());
             break;
         case LOWERCASE:
-        default:
             tmpWord = tmpWord.toLower();
             break;
         }
@@ -125,9 +146,5 @@ QString PassphraseGenerator::generatePassphrase() const
 
 bool PassphraseGenerator::isValid() const
 {
-    if (m_wordCount == 0) {
-        return false;
-    }
-
-    return m_wordlist.size() >= 1000;
+    return m_wordCount > 0 && m_wordlist.size() >= m_minimum_wordlist_length;
 }

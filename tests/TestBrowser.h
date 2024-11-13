@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2019 KeePassXC Team <team@keepassxc.org>
+ *  Copyright (C) 2023 KeePassXC Team <team@keepassxc.org>
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -22,7 +22,6 @@
 
 #include "browser/BrowserAction.h"
 #include "browser/BrowserService.h"
-#include "core/Group.h"
 
 class TestBrowser : public QObject
 {
@@ -30,25 +29,33 @@ class TestBrowser : public QObject
 
 private slots:
     void initTestCase();
-    void cleanupTestCase();
+    void init();
 
     void testChangePublicKeys();
     void testEncryptMessage();
     void testDecryptMessage();
     void testGetBase64FromKey();
     void testIncrementNonce();
-
-    void testBaseDomain();
+    void testBuildResponse();
     void testSortPriority();
+    void testSortPriority_data();
     void testSearchEntries();
+    void testSearchEntriesByPath();
+    void testSearchEntriesByUUID();
+    void testSearchEntriesByReference();
     void testSearchEntriesWithPort();
     void testSearchEntriesWithAdditionalURLs();
-    void testSortEntries();
-    void testGetDatabaseGroups();
+    void testInvalidEntries();
+    void testSubdomainsAndPaths();
+    void testBestMatchingCredentials();
+    void testBestMatchingWithAdditionalURLs();
+    void testRestrictBrowserKey();
 
 private:
-    QScopedPointer<BrowserAction> m_browserAction;
-    QScopedPointer<BrowserService> m_browserService;
-};
+    QList<Entry*> createEntries(QStringList& urls, Group* root) const;
+    void compareEntriesByPath(QSharedPointer<Database> db, QList<Entry*> entries, QString path);
 
+    QScopedPointer<BrowserAction> m_browserAction;
+    QPointer<BrowserService> m_browserService;
+};
 #endif // KEEPASSXC_TESTBROWSER_H

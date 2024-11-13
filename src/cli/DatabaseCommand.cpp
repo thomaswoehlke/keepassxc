@@ -18,6 +18,9 @@
 #include "DatabaseCommand.h"
 
 #include "Utils.h"
+#include "config-keepassx.h"
+
+#include <QCommandLineParser>
 
 DatabaseCommand::DatabaseCommand()
 {
@@ -57,8 +60,7 @@ int DatabaseCommand::execute(const QStringList& arguments)
 #else
                                    "",
 #endif
-                                   parser->isSet(Command::QuietOption) ? Utils::DEVNULL : Utils::STDOUT,
-                                   Utils::STDERR);
+                                   parser->isSet(Command::QuietOption));
         if (!db) {
             return EXIT_FAILURE;
         }

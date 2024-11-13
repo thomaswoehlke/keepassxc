@@ -16,76 +16,35 @@
  */
 
 #include "KeeShareSettings.h"
+
 #include "core/CustomData.h"
 #include "core/Database.h"
-#include "core/DatabaseIcons.h"
 #include "core/Group.h"
 #include "core/Metadata.h"
-#include "crypto/ssh/OpenSSHKey.h"
-#include "keeshare/Signature.h"
+#include "crypto/Random.h"
+#include "gui/DatabaseIcons.h"
 
-#include <QMessageBox>
-#include <QPainter>
-#include <QPushButton>
+#include <QDataStream>
+#include <QTextCodec>
+#include <QXmlStreamWriter>
 
-#include <functional>
+#include <botan/data_src.h>
+#include <botan/pkcs8.h>
+#include <botan/rsa.h>
 
 namespace KeeShareSettings
 {
     namespace
     {
-        Certificate packCertificate(const OpenSSHKey& key, const QString& signer)
-        {
-            KeeShareSettings::Certificate extracted;
-            extracted.signer = signer;
-            Q_ASSERT(key.type() == "ssh-rsa");
-            extracted.key = OpenSSHKey::serializeToBinary(OpenSSHKey::Public, key);
-            return extracted;
-        }
-
-        Key packKey(const OpenSSHKey& key)
-        {
-            KeeShareSettings::Key extracted;
-            Q_ASSERT(key.type() == "ssh-rsa");
-            extracted.key = OpenSSHKey::serializeToBinary(OpenSSHKey::Private, key);
-            return extracted;
-        }
-
-        OpenSSHKey unpackKey(const Key& sign)
-        {
-            if (sign.key.isEmpty()) {
-                return OpenSSHKey();
-            }
-            OpenSSHKey key = OpenSSHKey::restoreFromBinary(OpenSSHKey::Private, sign.key);
-            Q_ASSERT(key.type() == "ssh-rsa");
-            return key;
-        }
-
-        OpenSSHKey unpackCertificate(const Certificate& certificate)
-        {
-            if (certificate.key.isEmpty()) {
-                return OpenSSHKey();
-            }
-            OpenSSHKey key = OpenSSHKey::restoreFromBinary(OpenSSHKey::Public, certificate.key);
-            Q_ASSERT(key.type() == "ssh-rsa");
-            return key;
-        }
-
         QString xmlSerialize(std::function<void(QXmlStreamWriter& writer)> specific)
         {
             QString buffer;
             QXmlStreamWriter writer(&buffer);
 
             writer.setCodec(QTextCodec::codecForName("UTF-8"));
-            writer.setAutoFormatting(true);
-            writer.setAutoFormattingIndent(2);
-
             writer.writeStartDocument();
             writer.writeStartElement("KeeShare");
-            writer.writeAttribute("xmlns:xsd", "http://www.w3.org/2001/XMLSchema");
-            writer.writeAttribute("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance");
             specific(writer);
-            writer.writeEndElement();
             writer.writeEndElement();
             writer.writeEndDocument();
             return buffer;
@@ -106,17 +65,23 @@ namespace KeeShareSettings
         if (certificate.isNull()) {
             return;
         }
+        auto berKey = Botan::PKCS8::BER_encode(*certificate.key);
+        auto baKey = QByteArray::fromRawData(reinterpret_cast<const char*>(berKey.data()), berKey.size());
+
         writer.writeStartElement("Signer");
         writer.writeCharacters(certificate.signer);
         writer.writeEndElement();
         writer.writeStartElement("Key");
-        writer.writeCharacters(certificate.key.toBase64());
+        writer.writeCharacters(baKey.toBase64());
         writer.writeEndElement();
     }
 
     bool Certificate::operator==(const Certificate& other) const
     {
-        return key == other.key && signer == other.signer;
+        if (isNull() || other.isNull()) {
+            return isNull() == other.isNull();
+        }
+        return key->private_key_bits() == other.key->private_key_bits() && signer == other.signer;
     }
 
     bool Certificate::operator!=(const Certificate& other) const
@@ -126,7 +91,7 @@ namespace KeeShareSettings
 
     bool Certificate::isNull() const
     {
-        return key.isEmpty() && signer.isEmpty();
+        return !key || signer.isEmpty();
     }
 
     QString Certificate::fingerprint() const
@@ -134,20 +99,7 @@ namespace KeeShareSettings
         if (isNull()) {
             return {};
         }
-        return sshKey().fingerprint();
-    }
-
-    OpenSSHKey Certificate::sshKey() const
-    {
-        return unpackCertificate(*this);
-    }
-
-    QString Certificate::publicKey() const
-    {
-        if (isNull()) {
-            return {};
-        }
-        return sshKey().publicKey();
+        return QString::fromStdString(key->fingerprint_public());
     }
 
     Certificate Certificate::deserialize(QXmlStreamReader& reader)
@@ -157,7 +109,16 @@ namespace KeeShareSettings
             if (reader.name() == "Signer") {
                 certificate.signer = reader.readElementText();
             } else if (reader.name() == "Key") {
-                certificate.key = QByteArray::fromBase64(reader.readElementText().toLatin1());
+                auto rawKey = QByteArray::fromBase64(reader.readElementText().toLatin1());
+                if (!rawKey.isEmpty()) {
+                    try {
+                        Botan::DataSource_Memory dataSource(reinterpret_cast<const uint8_t*>(rawKey.constData()),
+                                                            rawKey.size());
+                        certificate.key.reset(Botan::PKCS8::load_key(dataSource).release());
+                    } catch (std::exception& e) {
+                        qWarning("KeeShare: Failed to deserialize key data: %s", e.what());
+                    }
+                }
             }
         }
         return certificate;
@@ -165,7 +126,10 @@ namespace KeeShareSettings
 
     bool Key::operator==(const Key& other) const
     {
-        return key == other.key;
+        if (isNull() || other.isNull()) {
+            return isNull() == other.isNull();
+        }
+        return key->private_key_bits() == other.key->private_key_bits();
     }
 
     bool Key::operator!=(const Key& other) const
@@ -175,20 +139,7 @@ namespace KeeShareSettings
 
     bool Key::isNull() const
     {
-        return key.isEmpty();
-    }
-
-    QString Key::privateKey() const
-    {
-        if (isNull()) {
-            return {};
-        }
-        return sshKey().privateKey();
-    }
-
-    OpenSSHKey Key::sshKey() const
-    {
-        return unpackKey(*this);
+        return !key;
     }
 
     void Key::serialize(QXmlStreamWriter& writer, const Key& key)
@@ -196,24 +147,37 @@ namespace KeeShareSettings
         if (key.isNull()) {
             return;
         }
-        writer.writeCharacters(key.key.toBase64());
+        auto berKey = Botan::PKCS8::BER_encode(*key.key);
+        auto baKey = QByteArray::fromRawData(reinterpret_cast<const char*>(berKey.data()), berKey.size());
+        writer.writeCharacters(baKey.toBase64());
     }
 
     Key Key::deserialize(QXmlStreamReader& reader)
     {
         Key key;
-        key.key = QByteArray::fromBase64(reader.readElementText().toLatin1());
+        auto rawKey = QByteArray::fromBase64(reader.readElementText().toLatin1());
+        if (!rawKey.isEmpty()) {
+            try {
+                Botan::DataSource_Memory dataSource(reinterpret_cast<const uint8_t*>(rawKey.constData()),
+                                                    rawKey.size());
+                key.key.reset(Botan::PKCS8::load_key(dataSource).release());
+            } catch (std::exception& e) {
+                qWarning("KeeShare: Failed to deserialize key data: %s", e.what());
+            }
+        }
         return key;
     }
 
     Own Own::generate()
     {
-        OpenSSHKey key = OpenSSHKey::generate(false);
-        key.openKey(QString());
         Own own;
-        own.key = packKey(key);
-        const QString name = qgetenv("USER"); // + "@" + QHostInfo::localHostName();
-        own.certificate = packCertificate(key, name);
+        own.key.key.reset(new Botan::RSA_PrivateKey(*randomGen()->getRng(), 2048));
+        auto name = qgetenv("USER");
+        if (name.isEmpty()) {
+            name = qgetenv("USERNAME");
+        }
+        own.certificate.signer = name;
+        own.certificate.key = own.key.key;
         return own;
     }
 
@@ -249,7 +213,7 @@ namespace KeeShareSettings
                         }
                     }
                 } else {
-                    ::qWarning() << "Unknown KeeShareSettings element" << reader.name();
+                    qWarning("Unknown KeeShareSettings element %s", qPrintable(reader.name().toString()));
                     reader.skipCurrentElement();
                 }
             }
@@ -289,88 +253,12 @@ namespace KeeShareSettings
                 } else if (reader.name() == "PublicKey") {
                     own.certificate = Certificate::deserialize(reader);
                 } else {
-                    ::qWarning() << "Unknown KeeShareSettings element" << reader.name();
+                    qWarning("Unknown KeeShareSettings element %s", qPrintable(reader.name().toString()));
                     reader.skipCurrentElement();
                 }
             }
         });
         return own;
-    }
-
-    bool ScopedCertificate::operator==(const ScopedCertificate& other) const
-    {
-        return trust == other.trust && path == other.path && certificate == other.certificate;
-    }
-
-    bool ScopedCertificate::operator!=(const ScopedCertificate& other) const
-    {
-        return !operator==(other);
-    }
-
-    void ScopedCertificate::serialize(QXmlStreamWriter& writer, const ScopedCertificate& scopedCertificate)
-    {
-        writer.writeAttribute("Path", scopedCertificate.path);
-        QString trust = "Ask";
-        if (scopedCertificate.trust == KeeShareSettings::Trust::Trusted) {
-            trust = "Trusted";
-        }
-        if (scopedCertificate.trust == KeeShareSettings::Trust::Untrusted) {
-            trust = "Untrusted";
-        }
-        writer.writeAttribute("Trust", trust);
-        Certificate::serialize(writer, scopedCertificate.certificate);
-    }
-
-    ScopedCertificate ScopedCertificate::deserialize(QXmlStreamReader& reader)
-    {
-        ScopedCertificate scopedCertificate;
-        scopedCertificate.path = reader.attributes().value("Path").toString();
-        scopedCertificate.trust = KeeShareSettings::Trust::Ask;
-        auto trust = reader.attributes().value("Trust").toString();
-        if (trust.compare("Trusted", Qt::CaseInsensitive) == 0) {
-            scopedCertificate.trust = KeeShareSettings::Trust::Trusted;
-        }
-        if (trust.compare("Untrusted", Qt::CaseInsensitive) == 0) {
-            scopedCertificate.trust = KeeShareSettings::Trust::Untrusted;
-        }
-        scopedCertificate.certificate = Certificate::deserialize(reader);
-        return scopedCertificate;
-    }
-
-    QString Foreign::serialize(const Foreign& foreign)
-    {
-        return xmlSerialize([&](QXmlStreamWriter& writer) {
-            writer.writeStartElement("Foreign");
-            for (const ScopedCertificate& scopedCertificate : foreign.certificates) {
-                writer.writeStartElement("Certificate");
-                ScopedCertificate::serialize(writer, scopedCertificate);
-                writer.writeEndElement();
-            }
-            writer.writeEndElement();
-        });
-    }
-
-    Foreign Foreign::deserialize(const QString& raw)
-    {
-        Foreign foreign;
-        xmlDeserialize(raw, [&](QXmlStreamReader& reader) {
-            while (!reader.error() && reader.readNextStartElement()) {
-                if (reader.name() == "Foreign") {
-                    while (!reader.error() && reader.readNextStartElement()) {
-                        if (reader.name() == "Certificate") {
-                            foreign.certificates << ScopedCertificate::deserialize(reader);
-                        } else {
-                            ::qWarning() << "Unknown Cerificates element" << reader.name();
-                            reader.skipCurrentElement();
-                        }
-                    }
-                } else {
-                    ::qWarning() << "Unknown KeeShareSettings element" << reader.name();
-                    reader.skipCurrentElement();
-                }
-            }
-        });
-        return foreign;
     }
 
     Reference::Reference()
@@ -459,7 +347,7 @@ namespace KeeShareSettings
                 } else if (reader.name() == "Password") {
                     reference.password = QString::fromUtf8(QByteArray::fromBase64(reader.readElementText().toLatin1()));
                 } else {
-                    ::qWarning() << "Unknown Reference element" << reader.name();
+                    qWarning("Unknown Reference element %s", qPrintable(reader.name().toString()));
                     reader.skipCurrentElement();
                 }
             }
@@ -469,31 +357,38 @@ namespace KeeShareSettings
 
     QString Sign::serialize(const Sign& sign)
     {
+        if (sign.certificate.isNull()) {
+            return {};
+        }
+
+        // Extract RSA key data to serialize an ssh-rsa public key.
+        // ssh-rsa keys are currently not built into Botan
+        const auto rsaKey = static_cast<Botan::RSA_PrivateKey*>(sign.certificate.key.data());
+
+        std::vector<uint8_t> rsaE(rsaKey->get_e().bytes());
+        rsaKey->get_e().binary_encode(rsaE.data());
+
+        std::vector<uint8_t> rsaN(rsaKey->get_n().bytes());
+        rsaKey->get_n().binary_encode(rsaN.data());
+
+        QByteArray rsaKeySerialized;
+        QDataStream stream(&rsaKeySerialized, QIODevice::WriteOnly);
+        stream.writeBytes("ssh-rsa", 7);
+        stream.writeBytes(reinterpret_cast<const char*>(rsaE.data()), rsaE.size());
+        stream.writeBytes(reinterpret_cast<const char*>(rsaN.data()), rsaN.size());
+
         return xmlSerialize([&](QXmlStreamWriter& writer) {
             writer.writeStartElement("Signature");
             writer.writeCharacters(sign.signature);
             writer.writeEndElement();
             writer.writeStartElement("Certificate");
-            Certificate::serialize(writer, sign.certificate);
+            writer.writeStartElement("Signer");
+            writer.writeCharacters(sign.certificate.signer);
+            writer.writeEndElement();
+            writer.writeStartElement("Key");
+            writer.writeCharacters(rsaKeySerialized.toBase64());
+            writer.writeEndElement();
             writer.writeEndElement();
         });
-    }
-
-    Sign Sign::deserialize(const QString& raw)
-    {
-        Sign sign;
-        xmlDeserialize(raw, [&](QXmlStreamReader& reader) {
-            while (!reader.error() && reader.readNextStartElement()) {
-                if (reader.name() == "Signature") {
-                    sign.signature = reader.readElementText();
-                } else if (reader.name() == "Certificate") {
-                    sign.certificate = KeeShareSettings::Certificate::deserialize(reader);
-                } else {
-                    ::qWarning() << "Unknown Sign element" << reader.name();
-                    reader.skipCurrentElement();
-                }
-            }
-        });
-        return sign;
     }
 } // namespace KeeShareSettings

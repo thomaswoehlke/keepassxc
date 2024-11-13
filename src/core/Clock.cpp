@@ -16,6 +16,8 @@
  */
 #include "Clock.h"
 
+#include <QLocale>
+
 QSharedPointer<Clock> Clock::m_instance;
 
 QDateTime Clock::currentDateTimeUtc()
@@ -34,6 +36,11 @@ uint Clock::currentSecondsSinceEpoch()
     return instance().currentDateTimeImpl().toTime_t();
 }
 
+qint64 Clock::currentMilliSecondsSinceEpoch()
+{
+    return instance().currentDateTimeImpl().toMSecsSinceEpoch();
+}
+
 QDateTime Clock::serialized(const QDateTime& dateTime)
 {
     auto time = dateTime.time();
@@ -45,12 +52,12 @@ QDateTime Clock::serialized(const QDateTime& dateTime)
 
 QDateTime Clock::datetimeUtc(int year, int month, int day, int hour, int min, int second)
 {
-    return QDateTime(QDate(year, month, day), QTime(hour, min, second), Qt::UTC);
+    return {QDate(year, month, day), QTime(hour, min, second), Qt::UTC};
 }
 
 QDateTime Clock::datetime(int year, int month, int day, int hour, int min, int second)
 {
-    return QDateTime(QDate(year, month, day), QTime(hour, min, second), Qt::LocalTime);
+    return {QDate(year, month, day), QTime(hour, min, second), Qt::LocalTime};
 }
 
 QDateTime Clock::datetimeUtc(qint64 msecSinceEpoch)
@@ -73,13 +80,15 @@ QDateTime Clock::parse(const QString& text, const QString& format)
     return QDateTime::fromString(text, format);
 }
 
-Clock::~Clock()
+QString Clock::toString(const QDateTime& dateTime)
 {
+    static QLocale locale;
+    return locale.toString(dateTime, QLocale::ShortFormat);
 }
 
-Clock::Clock()
-{
-}
+Clock::~Clock() = default;
+
+Clock::Clock() = default;
 
 QDateTime Clock::currentDateTimeUtcImpl() const
 {

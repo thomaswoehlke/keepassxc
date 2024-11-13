@@ -38,6 +38,8 @@ private slots:
     void testResolveNonIdPlaceholdersToUuid();
     void testResolveClonedEntry();
     void testIsRecycled();
+    void testMoveUpDown();
+    void testPreviousParentGroup();
 };
 
 #endif // KEEPASSX_TESTENTRY_H

@@ -16,9 +16,9 @@
  */
 
 #include "TestKdbx2.h"
-#include "TestGlobal.h"
 
 #include "config-keepassx-tests.h"
+#include "core/Group.h"
 #include "core/Metadata.h"
 #include "crypto/Crypto.h"
 #include "format/KeePass2Reader.h"
@@ -26,6 +26,7 @@
 #include "keys/PasswordKey.h"
 
 #include <QBuffer>
+#include <QTest>
 
 QTEST_GUILESS_MAIN(TestKdbx2)
 
@@ -86,7 +87,7 @@ void TestKdbx2::testFormat200Upgrade()
     reader.readDatabase(filename, key, db.data());
     QVERIFY2(!reader.hasError(), reader.errorString().toStdString().c_str());
     QVERIFY(!db.isNull());
-    QCOMPARE(reader.version(), KeePass2::FILE_VERSION_2 & KeePass2::FILE_VERSION_CRITICAL_MASK);
+    QCOMPARE(reader.version(), KeePass2::FILE_VERSION_2);
     QCOMPARE(db->kdf()->uuid(), KeePass2::KDF_AES_KDBX3);
 
     QBuffer buffer;
@@ -109,6 +110,6 @@ void TestKdbx2::testFormat200Upgrade()
 
     // database should now be upgraded to KDBX 3 without data loss
     verifyKdbx2Db(targetDb);
-    QCOMPARE(reader.version(), KeePass2::FILE_VERSION_3_1 & KeePass2::FILE_VERSION_CRITICAL_MASK);
+    QCOMPARE(reader.version(), KeePass2::FILE_VERSION_3_1);
     QCOMPARE(targetDb->kdf()->uuid(), KeePass2::KDF_AES_KDBX3);
 }

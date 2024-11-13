@@ -58,13 +58,22 @@ TextStream::TextStream(const QByteArray& array, QIODevice::OpenMode openMode)
     detectCodec();
 }
 
+void TextStream::write(const char* str)
+{
+    // Workaround for an issue with QTextStream. Its operator<<(const char *string) will encode the
+    // string with a non-UTF-8 encoding. We work around this by wrapping the input string into
+    // a QString, thus enforcing UTF-8. More info:
+    // https://code.qt.io/cgit/qt/qtbase.git/commit?id=cec8cdba4d1b856e17c8743ba8803349d42dc701
+    *this << QString(str);
+}
+
 void TextStream::detectCodec()
 {
     QString codecName = "UTF-8";
     auto env = QProcessEnvironment::systemEnvironment();
 
 #ifdef Q_OS_WIN
-    WINBOOL success = false;
+    bool success = false;
 #ifdef CP_UTF8
     success = SetConsoleOutputCP(CP_UTF8);
 #endif

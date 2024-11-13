@@ -18,11 +18,19 @@
 #ifndef KEEPASSXC_KEESHARE_H
 #define KEEPASSXC_KEESHARE_H
 
-#include <QMap>
+#include <QFileInfo>
 #include <QUuid>
 
+#include "core/Config.h"
 #include "gui/MessageWidget.h"
-#include "keeshare/KeeShareSettings.h"
+
+namespace KeeShareSettings
+{
+    struct Own;
+    struct Active;
+    struct Foreign;
+    struct Reference;
+} // namespace KeeShareSettings
 
 class Group;
 class Database;
@@ -47,11 +55,10 @@ public:
     static QString sharingLabel(const Group* group);
 
     static KeeShareSettings::Own own();
-    static KeeShareSettings::Active active();
-    static KeeShareSettings::Foreign foreign();
-    static void setForeign(const KeeShareSettings::Foreign& foreign);
-    static void setActive(const KeeShareSettings::Active& active);
     static void setOwn(const KeeShareSettings::Own& own);
+
+    static KeeShareSettings::Active active();
+    static void setActive(const KeeShareSettings::Active& active);
 
     static KeeShareSettings::Reference referenceOf(const Group* group);
     static void setReferenceTo(Group* group, const KeeShareSettings::Reference& reference);
@@ -70,7 +77,7 @@ signals:
     void sharingMessage(QString, MessageWidget::MessageType);
 
 private slots:
-    void handleSettingsChanged(const QString&);
+    void handleSettingsChanged(Config::ConfigKey key);
 
 private:
     static KeeShare* m_instance;

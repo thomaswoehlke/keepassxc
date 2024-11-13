@@ -17,17 +17,12 @@
 
 #include "TestHibp.h"
 
-#include "config-keepassx-tests.h"
-
-#include "core/Database.h"
-#include "core/Entry.h"
 #include "core/Group.h"
 #include "core/HibpOffline.h"
 #include "crypto/Crypto.h"
 
 #include <QBuffer>
 #include <QByteArray>
-#include <QFile>
 #include <QList>
 #include <QTest>
 
@@ -94,22 +89,22 @@ void TestHibp::testPwned()
 
     Group* root = m_db->rootGroup();
 
-    Entry* entry1 = new Entry();
+    auto entry1 = new Entry();
     entry1->setPassword("foo");
     entry1->setGroup(root);
 
-    Entry* entry2 = new Entry();
+    auto entry2 = new Entry();
     entry2->setPassword("xyz");
     entry2->setGroup(root);
 
-    Entry* entry3 = new Entry();
+    auto entry3 = new Entry();
     entry3->setPassword("foo");
     m_db->recycleEntry(entry3);
 
-    Group* group1 = new Group();
+    auto group1 = new Group();
     group1->setParent(root);
 
-    Entry* entry4 = new Entry();
+    auto entry4 = new Entry();
     entry4->setPassword("bar");
     entry4->setGroup(group1);
 

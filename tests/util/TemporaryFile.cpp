@@ -17,8 +17,6 @@
 
 #include "TemporaryFile.h"
 
-#include <QTextStream>
-
 TemporaryFile::TemporaryFile()
     : TemporaryFile(nullptr)
 {
@@ -71,7 +69,7 @@ bool TemporaryFile::copyFromFile(const QString& otherFileName)
     }
 
     QByteArray data;
-    while(!(data = otherFile.read(1024)).isEmpty()) {
+    while (!(data = otherFile.read(1024)).isEmpty()) {
         write(data);
     }
 

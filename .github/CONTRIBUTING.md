@@ -38,7 +38,7 @@ We will accept contributions of good code that we can use from anyone.
  - “contributions”: This means just about anything you wish to contribute to the project, as long as it is good code we can use. The easier you make it for us to accept your contribution, the happier we are, but if it’s good enough, we will do a reasonable amount of work to use it.
  - “of good code”: This means that we will accept contributions that work well and efficiently, that fit in with the goals of the project, that match the project’s coding style, and that do not impose an undue maintenance workload on us going forward. This does not mean just program code, either, but documentation and artistic works as appropriate to the project.
  - “that we can use”: This means that your contribution must be given freely and irrevocably, that you must have the right to contribute it for our unrestricted use, and that your contribution is made under a license that is compatible with the license the project has chosen and that permits us to include, distribute, and modify your work without restriction.
- - “from anyone”: This means exactly that. We don’t care about anything but your code. We don’t care about your race, religion, national origin, biological gender, perceived gender, sexual orientation, lifestyle, political viewpoint, or anything extraneous like that. We will neither reject your contribution nor grant it preferential treatment on any basis except the code itself. We do, however, reserve the right to tell you to go away if you behave too obnoxiously toward us.
+ - “from anyone”: This means exactly that. We don’t care about anything but your code. We don’t care about your race, religion, national origin, biological gender, perceived gender, sexual orientation, lifestyle, political viewpoint, or anything extraneous like that. We will neither reject your contribution nor grant it preferential treatment on any basis except the code itself. We do, however, reserve the right to limit your access to our community if you violate our [Code of Conduct](../CODE-OF-CONDUCT.md).
 
 #### If Your Contribution Is Rejected
 
@@ -63,7 +63,7 @@ Before submitting a bug report, check if the problem has already been reported. 
 
 ### Discuss with the team
 
-As with feature requests, you can talk to the KeePassXC team about bugs, new features, other issues and pull requests on the dedicated issue tracker, or in the IRC channel on Freenode (`#keepassxc-dev` on `irc.freenode.net`, or use a [webchat link](https://webchat.freenode.net/?channels=%23keepassxc-dev)).
+As with feature requests, you can talk to the KeePassXC team about bugs, new features, other issues and pull requests on the dedicated issue tracker, on the [Matrix development channel](https://matrix.to/#/!RhJPJPGwQIFVQeXqZa:matrix.org?via=matrix.org), or in the IRC channel on Libera.Chat (`#keepassxc-dev` on `irc.libera.chat`, or use a [webchat link](https://web.libera.chat/#keepassxc-dev)).
 
 ### Your first code contribution
 
@@ -85,16 +85,23 @@ All pull requests must comply with the above requirements and with the [stylegui
 Translations are managed on [Transifex](https://www.transifex.com/keepassxc/keepassxc/) which offers a web interface.
 Please join an existing language team or request a new one if there is none.
 
+If you open a Pull Request with new strings that require translations, you will need to run the following:
+```
+./release-tool i18n lupdate
+```
+This will make the new strings available for translation in Transifex.
+
 ## Styleguides
 
 ### Git branch strategy
 
 The Branch Strategy is based on [git-flow-lite](http://nvie.com/posts/a-successful-git-branching-model/).
 
-* **master** – points to the latest public release
 * **develop** – points to the development of the next release, contains tested and reviewed code
 * **feature/**[name] – points to a branch with a new feature, one which is candidate for merge into develop (subject to rebase)
-* **hotfix/**[name] – points to a branch with a fix for a particular issue ID
+* **fix/**[name] – points to a branch with a fix for a particular issue ID
+
+Note: The **latest** tag is used to point to the most recent stable release.
 
 
 ### Git commit messages
@@ -132,7 +139,7 @@ For **Qt-UI files** (*.ui*): 2 spaces
 
 // Application includes
 #include "core/Config.h"
-#include "core/FilePath.h"
+#include "core/Resources.h"
 
 // Global includes
 #include <QWidget>

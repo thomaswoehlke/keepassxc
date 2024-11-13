@@ -19,11 +19,17 @@
 #ifndef KEEPASSX_DATABASEOPENWIDGET_H
 #define KEEPASSX_DATABASEOPENWIDGET_H
 
+#include <QPointer>
 #include <QScopedPointer>
+#include <QTimer>
 
+#include "config-keepassx.h"
 #include "gui/DialogyWidget.h"
-#include "keys/CompositeKey.h"
+#ifdef WITH_XC_YUBIKEY
+#include "osutils/DeviceListener.h"
+#endif
 
+class CompositeKey;
 class Database;
 class QFile;
 
@@ -38,46 +44,55 @@ class DatabaseOpenWidget : public DialogyWidget
 
 public:
     explicit DatabaseOpenWidget(QWidget* parent = nullptr);
-    ~DatabaseOpenWidget();
+    ~DatabaseOpenWidget() override;
     void load(const QString& filename);
+    QString filename();
     void clearForms();
     void enterKey(const QString& pw, const QString& keyFile);
     QSharedPointer<Database> database();
+    bool unlockingDatabase();
 
-public slots:
-    void pollYubikey();
+    // Quick Unlock helper functions
+    bool canPerformQuickUnlock() const;
+    bool isOnQuickUnlockScreen() const;
+    void toggleQuickUnlockScreen();
+    void triggerQuickUnlock();
+    void resetQuickUnlock();
 
 signals:
     void dialogFinished(bool accepted);
 
 protected:
-    void showEvent(QShowEvent* event) override;
-    void hideEvent(QHideEvent* event) override;
-    QSharedPointer<CompositeKey> databaseKey();
+    bool event(QEvent* event) override;
+    QSharedPointer<CompositeKey> buildDatabaseKey();
+    void setUserInteractionLock(bool state);
+
+    const QScopedPointer<Ui::DatabaseOpenWidget> m_ui;
+    QSharedPointer<Database> m_db;
+    QString m_filename;
+    bool m_retryUnlockWithEmptyPassword = false;
 
 protected slots:
     virtual void openDatabase();
     void reject();
 
 private slots:
-    void browseKeyFile();
-    void clearKeyFileEdit();
-    void handleKeyFileComboEdited();
-    void handleKeyFileComboChanged();
-    void yubikeyDetected(int slot, bool blocking);
-    void yubikeyDetectComplete();
-    void noYubikeyFound();
-    void openHardwareKeyHelp();
-
-protected:
-    const QScopedPointer<Ui::DatabaseOpenWidget> m_ui;
-    QSharedPointer<Database> m_db;
-    QString m_filename;
-    bool m_retryUnlockWithEmptyPassword = false;
+    bool browseKeyFile();
+    void toggleHardwareKeyComponent(bool state);
+    void pollHardwareKey(bool manualTrigger = false);
+    void hardwareKeyResponse(bool found);
 
 private:
-    bool m_yubiKeyBeingPolled = false;
-    bool m_keyFileComboEdited = false;
+#ifdef WITH_XC_YUBIKEY
+    QPointer<DeviceListener> m_deviceListener;
+#endif
+    bool m_pollingHardwareKey = false;
+    bool m_manualHardwareKeyRefresh = false;
+    bool m_blockQuickUnlock = false;
+    bool m_unlockingDatabase = false;
+    QTimer m_hideTimer;
+    QTimer m_hideNoHardwareKeysFoundTimer;
+
     Q_DISABLE_COPY(DatabaseOpenWidget)
 };
 

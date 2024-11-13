@@ -1,6 +1,5 @@
 /*
- *  Copyright (C) 2017 Weslly Honorato <﻿weslly@protonmail.com>
- *  Copyright (C) 2017 KeePassXC Team <team@keepassxc.org>
+ *  Copyright (C) 2019 KeePassXC Team <team@keepassxc.org>
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -20,8 +19,8 @@
 #include "ui_TotpSetupDialog.h"
 
 #include "core/Base32.h"
+#include "core/Totp.h"
 #include "gui/MessageBox.h"
-#include "totp/totp.h"
 
 TotpSetupDialog::TotpSetupDialog(QWidget* parent, Entry* entry)
     : QDialog(parent)
@@ -30,6 +29,7 @@ TotpSetupDialog::TotpSetupDialog(QWidget* parent, Entry* entry)
 {
     m_ui->setupUi(this);
     setAttribute(Qt::WA_DeleteOnClose);
+    setWindowFlag(Qt::WindowContextHelpButtonHint, false);
     setFixedSize(sizeHint());
 
     connect(m_ui->buttonBox, SIGNAL(rejected()), SLOT(close()));
@@ -39,16 +39,16 @@ TotpSetupDialog::TotpSetupDialog(QWidget* parent, Entry* entry)
     init();
 }
 
-TotpSetupDialog::~TotpSetupDialog()
-{
-}
+TotpSetupDialog::~TotpSetupDialog() = default;
 
 void TotpSetupDialog::saveSettings()
 {
     // Secret key sanity check
-    auto key = m_ui->seedEdit->text().toLatin1();
+    // Convert user input to all uppercase and remove '='
+    auto key = m_ui->seedEdit->text().toUpper().remove(" ").remove("=").trimmed().toLatin1();
     auto sanitizedKey = Base32::sanitizeInput(key);
-    if (sanitizedKey != key) {
+    // Use startsWith to ignore added '=' for padding at the end
+    if (!sanitizedKey.startsWith(key)) {
         MessageBox::information(this,
                                 tr("Invalid TOTP Secret"),
                                 tr("You have entered an invalid secret key. The key must be in Base32 format.\n"
@@ -112,12 +112,14 @@ void TotpSetupDialog::init()
     // Read entry totp settings
     auto settings = m_entry->totpSettings();
     if (settings) {
-        m_ui->seedEdit->setText(settings->key);
+        auto key = settings->key;
+        m_ui->seedEdit->setText(key.remove("="));
+        m_ui->seedEdit->setCursorPosition(0);
         m_ui->stepSpinBox->setValue(settings->step);
 
         if (settings->encoder.shortName == Totp::STEAM_SHORTNAME) {
             m_ui->radioSteam->setChecked(true);
-        } else if (settings->custom) {
+        } else if (Totp::hasCustomSettings(settings)) {
             m_ui->radioCustom->setChecked(true);
             m_ui->digitsSpinBox->setValue(settings->digits);
             int index = m_ui->algorithmComboBox->findData(settings->algorithm);

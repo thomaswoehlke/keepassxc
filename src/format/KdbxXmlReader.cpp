@@ -18,17 +18,14 @@
 #include "KdbxXmlReader.h"
 #include "KeePass2RandomStream.h"
 #include "core/Clock.h"
-#include "core/DatabaseIcons.h"
 #include "core/Endian.h"
-#include "core/Entry.h"
 #include "core/Global.h"
 #include "core/Group.h"
 #include "core/Tools.h"
-#include "streams/QtIOCompressor"
+#include "streams/qtiocompressor.h"
 
 #include <QBuffer>
 #include <QFile>
-#include <utility>
 
 #define UUID_LENGTH 16
 
@@ -124,8 +121,8 @@ void KdbxXmlReader::readDatabase(QIODevice* device, Database* db, KeePass2Random
         qWarning("KdbxXmlReader::readDatabase: found %d invalid entry reference(s)", m_tmpParent->children().size());
     }
 
-    const QSet<QString> poolKeys = asConst(m_binaryPool).keys().toSet();
-    const QSet<QString> entryKeys = asConst(m_binaryMap).keys().toSet();
+    const QSet<QString> poolKeys = Tools::asSet(m_binaryPool.keys());
+    const QSet<QString> entryKeys = Tools::asSet(m_binaryMap.keys());
     const QSet<QString> unmappedKeys = entryKeys - poolKeys;
     const QSet<QString> unusedKeys = poolKeys - entryKeys;
 
@@ -137,7 +134,7 @@ void KdbxXmlReader::readDatabase(QIODevice* device, Database* db, KeePass2Random
         qWarning("KdbxXmlReader::readDatabase: found unused key \"%s\"", qPrintable(key));
     }
 
-    QHash<QString, QPair<Entry*, QString>>::const_iterator i;
+    QMultiHash<QString, QPair<Entry*, QString>>::const_iterator i;
     for (i = m_binaryMap.constBegin(); i != m_binaryMap.constEnd(); ++i) {
         const QPair<Entry*, QString>& target = i.value();
         target.first->attachments()->set(target.second, m_binaryPool[i.key()]);
@@ -187,7 +184,7 @@ QString KdbxXmlReader::errorString() const
             .arg(m_xml.lineNumber())
             .arg(m_xml.columnNumber());
     }
-    return QString();
+    return {};
 }
 
 bool KdbxXmlReader::isTrueValue(const QStringRef& value)
@@ -262,7 +259,7 @@ void KdbxXmlReader::parseMeta()
         } else if (m_xml.name() == "Color") {
             m_meta->setColor(readColor());
         } else if (m_xml.name() == "MasterKeyChanged") {
-            m_meta->setMasterKeyChanged(readDateTime());
+            m_meta->setDatabaseKeyChanged(readDateTime());
         } else if (m_xml.name() == "MasterKeyChangeRec") {
             m_meta->setMasterKeyChangeRec(readNumber());
         } else if (m_xml.name() == "MasterKeyChangeForce") {
@@ -350,7 +347,9 @@ void KdbxXmlReader::parseIcon()
     Q_ASSERT(m_xml.isStartElement() && m_xml.name() == "Icon");
 
     QUuid uuid;
-    QImage icon;
+    QByteArray iconData;
+    QString name;
+    QDateTime lastModified;
     bool uuidSet = false;
     bool iconSet = false;
 
@@ -359,8 +358,12 @@ void KdbxXmlReader::parseIcon()
             uuid = readUuid();
             uuidSet = !uuid.isNull();
         } else if (m_xml.name() == "Data") {
-            icon.loadFromData(readBinary());
+            iconData = readBinary();
             iconSet = true;
+        } else if (m_xml.name() == "Name") {
+            name = readString();
+        } else if (m_xml.name() == "LastModificationTime") {
+            lastModified = readDateTime();
         } else {
             skipCurrentElement();
         }
@@ -368,10 +371,10 @@ void KdbxXmlReader::parseIcon()
 
     if (uuidSet && iconSet) {
         // Check for duplicate UUID (corruption)
-        if (m_meta->containsCustomIcon(uuid)) {
+        if (m_meta->hasCustomIcon(uuid)) {
             uuid = QUuid::createUuid();
         }
-        m_meta->addCustomIcon(uuid, icon);
+        m_meta->addCustomIcon(uuid, iconData, name, lastModified);
         return;
     }
 
@@ -418,7 +421,7 @@ void KdbxXmlReader::parseCustomDataItem(CustomData* customData)
     Q_ASSERT(m_xml.isStartElement() && m_xml.name() == "Item");
 
     QString key;
-    QString value;
+    CustomData::CustomDataItem item;
     bool keySet = false;
     bool valueSet = false;
 
@@ -427,15 +430,17 @@ void KdbxXmlReader::parseCustomDataItem(CustomData* customData)
             key = readString();
             keySet = true;
         } else if (m_xml.name() == "Value") {
-            value = readString();
+            item.value = readString();
             valueSet = true;
+        } else if (m_xml.name() == "LastModificationTime") {
+            item.lastModified = readDateTime();
         } else {
             skipCurrentElement();
         }
     }
 
     if (keySet && valueSet) {
-        customData->set(key, value);
+        customData->set(key, item);
         return;
     }
 
@@ -459,8 +464,7 @@ bool KdbxXmlReader::parseRoot()
 
             Group* rootGroup = parseGroup();
             if (rootGroup) {
-                Group* oldRoot = m_db->rootGroup();
-                m_db->setRootGroup(rootGroup);
+                auto oldRoot = m_db->setRootGroup(rootGroup);
                 delete oldRoot;
                 groupParsedSuccessfully = true;
             }
@@ -506,6 +510,10 @@ Group* KdbxXmlReader::parseGroup()
             group->setNotes(readString());
             continue;
         }
+        if (m_xml.name() == "Tags") {
+            group->setTags(readString());
+            continue;
+        }
         if (m_xml.name() == "IconID") {
             int iconId = readNumber();
             if (iconId < 0) {
@@ -513,9 +521,6 @@ Group* KdbxXmlReader::parseGroup()
                     raiseError(tr("Invalid group icon number"));
                 }
                 iconId = 0;
-            } else if (iconId >= DatabaseIcons::IconCount) {
-                qWarning("KdbxXmlReader::parseGroup: icon id \"%d\" not supported", iconId);
-                iconId = DatabaseIcons::IconCount - 1;
             }
 
             group->setIcon(iconId);
@@ -590,6 +595,10 @@ Group* KdbxXmlReader::parseGroup()
             parseCustomData(group->customData());
             continue;
         }
+        if (m_xml.name() == "PreviousParentGroup") {
+            group->setPreviousParentGroupUuid(readUuid());
+            continue;
+        }
 
         skipCurrentElement();
     }
@@ -609,11 +618,11 @@ Group* KdbxXmlReader::parseGroup()
     }
 
     for (Group* child : asConst(children)) {
-        child->setParent(group);
+        child->setParent(group, -1, false);
     }
 
     for (Entry* entry : asConst(entries)) {
-        entry->setGroup(group);
+        entry->setGroup(group, false);
     }
 
     return group;
@@ -733,6 +742,10 @@ Entry* KdbxXmlReader::parseEntry(bool history)
             parseEntryString(entry);
             continue;
         }
+        if (m_xml.name() == "QualityCheck") {
+            entry->setExcludeFromReports(!readBool());
+            continue;
+        }
         if (m_xml.name() == "Binary") {
             QPair<QString, QString> ref = parseEntryBinary(entry);
             if (!ref.first.isEmpty() && !ref.second.isEmpty()) {
@@ -754,6 +767,17 @@ Entry* KdbxXmlReader::parseEntry(bool history)
         }
         if (m_xml.name() == "CustomData") {
             parseCustomData(entry->customData());
+
+            // Upgrade pre-KDBX-4.1 password report exclude flag
+            if (entry->customData()->contains(CustomData::ExcludeFromReportsLegacy)) {
+                entry->setExcludeFromReports(entry->customData()->value(CustomData::ExcludeFromReportsLegacy)
+                                             == TRUE_STR);
+                entry->customData()->remove(CustomData::ExcludeFromReportsLegacy);
+            }
+            continue;
+        }
+        if (m_xml.name() == "PreviousParentGroup") {
+            entry->setPreviousParentGroupUuid(readUuid());
             continue;
         }
         skipCurrentElement();
@@ -791,7 +815,7 @@ Entry* KdbxXmlReader::parseEntry(bool history)
     }
 
     for (const StringPair& ref : asConst(binaryRefs)) {
-        m_binaryMap.insertMulti(ref.first, qMakePair(entry, ref.second));
+        m_binaryMap.insert(ref.first, qMakePair(entry, ref.second));
     }
 
     return entry;
@@ -875,11 +899,13 @@ QPair<QString, QString> KdbxXmlReader::parseEntryBinary(Entry* entry)
     }
 
     if (keySet && valueSet) {
-        if (entry->attachments()->hasKey(key)) {
-            raiseError(tr("Duplicate attachment found"));
-        } else {
-            entry->attachments()->set(key, value);
+        if (entry->attachments()->hasKey(key) && entry->attachments()->value(key) != value) {
+            // NOTE: This only impacts KDBX 3.x databases
+            // Prepend a random string to the key to make it unique and prevent data loss
+            key = key.prepend(QUuid::createUuid().toString().mid(1, 8) + "_");
+            qWarning("Duplicate attachment name found, renamed to: %s", qPrintable(key));
         }
+        entry->attachments()->set(key, value);
     } else {
         raiseError(tr("Entry binary key or value missing"));
     }
@@ -1047,22 +1073,21 @@ QDateTime KdbxXmlReader::readDateTime()
     return Clock::currentDateTimeUtc();
 }
 
-QColor KdbxXmlReader::readColor()
+QString KdbxXmlReader::readColor()
 {
     QString colorStr = readString();
 
     if (colorStr.isEmpty()) {
-        return {};
+        return colorStr;
     }
 
     if (colorStr.length() != 7 || colorStr[0] != '#') {
         if (m_strictMode) {
             raiseError(tr("Invalid color value"));
         }
-        return {};
+        return colorStr;
     }
 
-    QColor color;
     for (int i = 0; i <= 2; ++i) {
         QString rgbPartStr = colorStr.mid(1 + 2 * i, 2);
         bool ok;
@@ -1071,19 +1096,11 @@ QColor KdbxXmlReader::readColor()
             if (m_strictMode) {
                 raiseError(tr("Invalid color rgb part"));
             }
-            return {};
-        }
-
-        if (i == 0) {
-            color.setRed(rgbPart);
-        } else if (i == 1) {
-            color.setGreen(rgbPart);
-        } else {
-            color.setBlue(rgbPart);
+            return colorStr;
         }
     }
 
-    return color;
+    return colorStr;
 }
 
 int KdbxXmlReader::readNumber()
@@ -1100,13 +1117,13 @@ QUuid KdbxXmlReader::readUuid()
 {
     QByteArray uuidBin = readBinary();
     if (uuidBin.isEmpty()) {
-        return QUuid();
+        return {};
     }
     if (uuidBin.length() != UUID_LENGTH) {
         if (m_strictMode) {
             raiseError(tr("Invalid uuid value"));
         }
-        return QUuid();
+        return {};
     }
     return QUuid::fromRfc4122(uuidBin);
 }

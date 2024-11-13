@@ -79,19 +79,22 @@ QVariant AutoTypeAssociationsModel::headerData(int section, Qt::Orientation orie
             return tr("Sequence");
         }
     } else {
-        return QVariant();
+        return {};
     }
 }
 
 QVariant AutoTypeAssociationsModel::data(const QModelIndex& index, int role) const
 {
     if (!index.isValid()) {
-        return QVariant();
+        return {};
     }
 
     if (role == Qt::DisplayRole) {
         if (index.column() == 0) {
             QString window = m_autoTypeAssociations->get(index.row()).window;
+            if (window.isEmpty()) {
+                return tr("(empty)");
+            }
             if (m_entry) {
                 window = m_entry->maskPasswordPlaceholders(window);
                 window = m_entry->resolveMultiplePlaceholders(window);
@@ -105,7 +108,7 @@ QVariant AutoTypeAssociationsModel::data(const QModelIndex& index, int role) con
             return sequence;
         }
     } else {
-        return QVariant();
+        return {};
     }
 }
 

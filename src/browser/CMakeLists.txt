@@ -1,5 +1,4 @@
-#  Copyright (C) 2017 Sami Vänttinen <sami.vanttinen@protonmail.com>
-#  Copyright (C) 2017 KeePassXC Team <team@keepassxc.org>
+#  Copyright (C) 2024 KeePassXC Team <team@keepassxc.org>
 #
 #  This program is free software: you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -17,20 +16,30 @@
 if(WITH_XC_BROWSER)
     include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR})
 
-    set(keepassxcbrowser_SOURCES
+    set(browser_SOURCES
             BrowserAccessControlDialog.cpp
             BrowserAction.cpp
-            BrowserClients.cpp
             BrowserEntryConfig.cpp
             BrowserEntrySaveDialog.cpp
-            BrowserOptionDialog.cpp
+            BrowserHost.cpp
+            BrowserMessageBuilder.cpp
+            BrowserSettingsPage.cpp
+            BrowserSettingsWidget.cpp
             BrowserService.cpp
             BrowserSettings.cpp
-            HostInstaller.cpp
-            NativeMessagingBase.cpp
-            NativeMessagingHost.cpp
-            Variant.cpp)
+            BrowserShared.cpp
+            CustomTableWidget.cpp
+            NativeMessageInstaller.cpp)
 
-    add_library(keepassxcbrowser STATIC ${keepassxcbrowser_SOURCES})
-    target_link_libraries(keepassxcbrowser Qt5::Core Qt5::Concurrent Qt5::Widgets Qt5::Network ${sodium_LIBRARY_RELEASE})
+    if(WITH_XC_BROWSER_PASSKEYS)
+        list(APPEND browser_SOURCES
+                BrowserCbor.cpp
+                BrowserPasskeys.cpp
+                BrowserPasskeysClient.cpp
+                BrowserPasskeysConfirmationDialog.cpp
+                PasskeyUtils.cpp)
+    endif()
+
+    add_library(browser STATIC ${browser_SOURCES})
+    target_link_libraries(browser Qt5::Core Qt5::Concurrent Qt5::Widgets Qt5::Network ${BOTAN_LIBRARIES})
 endif()

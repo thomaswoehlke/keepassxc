@@ -20,7 +20,11 @@
 #define KEEPASSX_AUTOTYPEWINDOWS_H
 
 #include <QtPlugin>
-#include <Windows.h>
+
+#undef NOMINMAX
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
 
 #include "autotype/AutoTypeAction.h"
 #include "autotype/AutoTypePlatformPlugin.h"
@@ -36,23 +40,16 @@ public:
     QStringList windowTitles() override;
     WId activeWindow() override;
     QString activeWindowTitle() override;
-    bool registerGlobalShortcut(Qt::Key key, Qt::KeyboardModifiers modifiers) override;
-    void unregisterGlobalShortcut(Qt::Key key, Qt::KeyboardModifiers modifiers) override;
-    int platformEventFilter(void* event) override;
     bool raiseWindow(WId window) override;
     AutoTypeExecutor* createExecutor() override;
 
-    void sendChar(const QChar& ch, bool isKeyDown);
-    void sendKey(Qt::Key key, bool isKeyDown);
-
-signals:
-    void globalShortcutTriggered();
+    void sendCharVirtual(const QChar& ch);
+    void sendChar(const QChar& ch);
+    void setKeyState(Qt::Key key, bool down);
 
 private:
-    static DWORD qtToNativeKeyCode(Qt::Key key);
-    static DWORD qtToNativeModifiers(Qt::KeyboardModifiers modifiers);
-    static BOOL isExtendedKey(DWORD nativeKeyCode);
-    static BOOL isAltTabWindow(HWND hwnd);
+    static bool isExtendedKey(DWORD nativeKeyCode);
+    static bool isAltTabWindow(HWND hwnd);
     static BOOL CALLBACK windowTitleEnumProc(_In_ HWND hwnd, _In_ LPARAM lParam);
     static QString windowTitle(HWND hwnd);
 };
@@ -62,9 +59,9 @@ class AutoTypeExecutorWin : public AutoTypeExecutor
 public:
     explicit AutoTypeExecutorWin(AutoTypePlatformWin* platform);
 
-    void execChar(AutoTypeChar* action) override;
-    void execKey(AutoTypeKey* action) override;
-    void execClearField(AutoTypeClearField* action) override;
+    AutoTypeAction::Result execBegin(const AutoTypeBegin* action) override;
+    AutoTypeAction::Result execType(const AutoTypeKey* action) override;
+    AutoTypeAction::Result execClearField(const AutoTypeClearField* action) override;
 
 private:
     AutoTypePlatformWin* const m_platform;

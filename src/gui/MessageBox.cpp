@@ -19,6 +19,9 @@
 #include "MessageBox.h"
 
 #include <QCheckBox>
+#include <QLayout>
+#include <QMap>
+#include <QPushButton>
 #include <QWindow>
 
 QWindow* MessageBox::m_overrideParent(nullptr);
@@ -64,6 +67,7 @@ void MessageBox::initializeButtonDefs()
         {Disable, {QMessageBox::tr("Disable"), QMessageBox::ButtonRole::AcceptRole}},
         {Merge, {QMessageBox::tr("Merge"), QMessageBox::ButtonRole::AcceptRole}},
         {Continue, {QMessageBox::tr("Continue"), QMessageBox::ButtonRole::AcceptRole}},
+        {ContinueWithWeakPass, {QMessageBox::tr("Continue with weak password"), QMessageBox::ButtonRole::AcceptRole}},
     };
 }
 
@@ -98,10 +102,10 @@ MessageBox::Button MessageBox::messageBox(QWidget* parent,
 
         for (uint64_t b = First; b <= Last; b <<= 1) {
             if (b & buttons) {
-                QString text = m_buttonDefs[static_cast<Button>(b)].first;
+                QString buttonText = m_buttonDefs[static_cast<Button>(b)].first;
                 QMessageBox::ButtonRole role = m_buttonDefs[static_cast<Button>(b)].second;
 
-                auto buttonPtr = msgBox.addButton(text, role);
+                auto buttonPtr = msgBox.addButton(buttonText, role);
                 m_addedButtonLookup.insert(buttonPtr, static_cast<Button>(b));
             }
         }
@@ -123,6 +127,7 @@ MessageBox::Button MessageBox::messageBox(QWidget* parent,
             msgBox.activateWindow();
             msgBox.raise();
         }
+        msgBox.layout()->setSizeConstraint(QLayout::SetMinimumSize);
         msgBox.exec();
 
         Button returnButton = m_addedButtonLookup[msgBox.clickedButton()];

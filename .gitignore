@@ -21,3 +21,13 @@ desktop.ini
 /*.snap
 /*_source.tar.bz2
 
+# MSVC Files
+CMakeSettings.json
+CMakePresets.json
+CMakeUserPresets.json
+.vs/
+out/
+
+# vcpkg
+vcpkg_installed*/
+

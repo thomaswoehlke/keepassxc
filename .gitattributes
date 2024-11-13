@@ -11,3 +11,9 @@ AppImage-Recipe.sh export-ignore
 # github-linguist language hints
 *.h linguist-language=C++
 *.cpp linguist-language=C++
+
+# binary files
+*.ai binary
+
+# Line endings harmony
+* text=auto

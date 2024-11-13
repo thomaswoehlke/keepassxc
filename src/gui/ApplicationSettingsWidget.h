@@ -30,9 +30,7 @@ namespace Ui
 class ISettingsPage
 {
 public:
-    virtual ~ISettingsPage()
-    {
-    }
+    virtual ~ISettingsPage() = default;
     virtual QString name() = 0;
     virtual QIcon icon() = 0;
     virtual QWidget* createWidget() = 0;
@@ -46,7 +44,7 @@ class ApplicationSettingsWidget : public EditWidget
 
 public:
     explicit ApplicationSettingsWidget(QWidget* parent = nullptr);
-    ~ApplicationSettingsWidget();
+    ~ApplicationSettingsWidget() override;
     void addSettingsPage(ISettingsPage* page);
     void loadSettings();
 
@@ -56,13 +54,16 @@ signals:
 private slots:
     void saveSettings();
     void resetSettings();
+    void importSettings();
+    void exportSettings();
     void reject();
     void autoSaveToggled(bool checked);
     void hideWindowOnCopyCheckBoxToggled(bool checked);
     void systrayToggled(bool checked);
-    void toolbarSettingsToggled(bool checked);
     void rememberDatabasesToggled(bool checked);
     void checkUpdatesToggled(bool checked);
+    void showExpiredEntriesOnDatabaseUnlockToggled(bool checked);
+    void selectBackupDirectory();
 
 private:
     QWidget* const m_secWidget;

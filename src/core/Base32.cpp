@@ -23,6 +23,9 @@
 
 #include "Base32.h"
 
+#include <QHash>
+#include <QVariant>
+
 constexpr quint64 MASK_40BIT = quint64(0xF8) << 32;
 constexpr quint64 MASK_35BIT = quint64(0x7C0000000);
 constexpr quint64 MASK_25BIT = quint64(0x1F00000);
@@ -47,7 +50,7 @@ QVariant Base32::decode(const QByteArray& encodedData)
     }
 
     if (encodedData.size() % 8 != 0) {
-        return QVariant();
+        return {};
     }
 
     int nPads = 0;
@@ -116,7 +119,7 @@ QVariant Base32::decode(const QByteArray& encodedData)
                         continue;
                     } else {
                         // illegal character
-                        return QVariant();
+                        return {};
                     }
                 }
             }
@@ -142,7 +145,7 @@ QVariant Base32::decode(const QByteArray& encodedData)
 QByteArray Base32::encode(const QByteArray& data)
 {
     if (data.size() < 1) {
-        return QByteArray();
+        return {};
     }
 
     const int nBits = data.size() * 8;

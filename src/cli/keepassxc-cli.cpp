@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2017 KeePassXC Team <team@keepassxc.org>
+ *  Copyright (C) 2020 KeePassXC Team <team@keepassxc.org>
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -15,23 +15,17 @@
  *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <cstdlib>
-#include <memory>
-
 #include <QCommandLineParser>
-#include <QCoreApplication>
-#include <QDir>
-#include <QScopedPointer>
-#include <QStringList>
+#include <QFileInfo>
 
-#include "cli/TextStream.h"
-#include <cli/Command.h>
-
-#include "DatabaseCommand.h"
+#include "Command.h"
 #include "Open.h"
+#include "TextStream.h"
 #include "Utils.h"
 #include "config-keepassx.h"
 #include "core/Bootstrap.h"
+#include "core/Config.h"
+#include "core/Metadata.h"
 #include "core/Tools.h"
 #include "crypto/Crypto.h"
 
@@ -116,15 +110,18 @@ private:
 };
 #endif
 
-void enterInteractiveMode(const QStringList& arguments)
+int enterInteractiveMode(const QStringList& arguments)
 {
+    auto& err = Utils::STDERR;
     // Replace command list with interactive version
     Commands::setupCommands(true);
 
-    Open o;
+    Open openCmd;
     QStringList openArgs(arguments);
     openArgs.removeFirst();
-    o.execute(openArgs);
+    if (openCmd.execute(openArgs) != EXIT_SUCCESS) {
+        return EXIT_FAILURE;
+    };
 
     QScopedPointer<LineReader> reader;
 #if defined(USE_READLINE)
@@ -133,12 +130,10 @@ void enterInteractiveMode(const QStringList& arguments)
     reader.reset(new SimpleLineReader());
 #endif
 
-    QSharedPointer<Database> currentDatabase(o.currentDatabase);
+    QSharedPointer<Database> currentDatabase(openCmd.currentDatabase);
 
     QString command;
     while (true) {
-        TextStream errorTextStream(Utils::STDERR, QIODevice::WriteOnly);
-
         QString prompt;
         if (currentDatabase) {
             prompt += currentDatabase->metadata()->name();
@@ -149,7 +144,7 @@ void enterInteractiveMode(const QStringList& arguments)
         prompt += "> ";
         command = reader->readLine(prompt);
         if (reader->isFinished()) {
-            return;
+            break;
         }
 
         QStringList args = Utils::splitCommandString(command);
@@ -159,32 +154,41 @@ void enterInteractiveMode(const QStringList& arguments)
 
         auto cmd = Commands::getCommand(args[0]);
         if (!cmd) {
-            errorTextStream << QObject::tr("Unknown command %1").arg(args[0]) << "\n";
+            err << QObject::tr("Unknown command %1").arg(args[0]) << Qt::endl;
             continue;
         } else if (cmd->name == "quit" || cmd->name == "exit") {
-            return;
+            break;
         }
 
-        cmd->currentDatabase = currentDatabase;
+        cmd->currentDatabase.swap(currentDatabase);
         cmd->execute(args);
-        currentDatabase = cmd->currentDatabase;
+        currentDatabase.swap(cmd->currentDatabase);
     }
+
+    if (currentDatabase) {
+        currentDatabase->releaseData();
+    }
+
+    return EXIT_SUCCESS;
 }
 
 int main(int argc, char** argv)
 {
     if (!Crypto::init()) {
-        qFatal("Fatal error while testing the cryptographic functions:\n%s", qPrintable(Crypto::errorString()));
+        qWarning("Fatal error while testing the cryptographic functions:\n%s", qPrintable(Crypto::errorString()));
         return EXIT_FAILURE;
     }
 
     QCoreApplication app(argc, argv);
     QCoreApplication::setApplicationVersion(KEEPASSXC_VERSION);
 
-    Bootstrap::bootstrap();
+    Bootstrap::bootstrap(config()->get(Config::GUI_Language).toString());
+    Utils::setDefaultTextStreams();
     Commands::setupCommands(false);
 
-    TextStream out(stdout);
+    auto& out = Utils::STDOUT;
+    auto& err = Utils::STDERR;
+
     QStringList arguments;
     for (int i = 0; i < argc; ++i) {
         arguments << QString(argv[i]);
@@ -212,33 +216,36 @@ int main(int argc, char** argv)
     if (parser.positionalArguments().empty()) {
         if (parser.isSet("version")) {
             // Switch to parser.showVersion() when available (QT 5.4).
-            out << KEEPASSXC_VERSION << endl;
+            out << KEEPASSXC_VERSION << Qt::endl;
             return EXIT_SUCCESS;
         } else if (parser.isSet(debugInfoOption)) {
             QString debugInfo = Tools::debugInfo().append("\n").append(Crypto::debugInfo());
-            out << debugInfo << endl;
+            out << debugInfo << Qt::endl;
             return EXIT_SUCCESS;
         }
+        // showHelp exits the application immediately.
         parser.showHelp();
     }
 
     QString commandName = parser.positionalArguments().at(0);
     if (commandName == "open") {
-        enterInteractiveMode(arguments);
-        return EXIT_SUCCESS;
+        return enterInteractiveMode(arguments);
     }
 
     auto command = Commands::getCommand(commandName);
     if (!command) {
-        qCritical("Invalid command %s.", qPrintable(commandName));
-        // showHelp exits the application immediately, so we need to set the
-        // exit code here.
-        parser.showHelp(EXIT_FAILURE);
+        err << QObject::tr("Invalid command %1.").arg(commandName) << Qt::endl;
+        err << parser.helpText();
+        return EXIT_FAILURE;
     }
 
     // Removing the first argument (keepassxc).
     arguments.removeFirst();
     int exitCode = command->execute(arguments);
+
+    if (command->currentDatabase) {
+        command->currentDatabase.reset();
+    }
 
 #if defined(WITH_ASAN) && defined(WITH_LSAN)
     // do leak check here to prevent massive tail of end-of-process leak errors from third-party libraries

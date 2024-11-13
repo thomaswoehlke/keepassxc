@@ -1,6 +1,6 @@
 /*
+ *  Copyright (C) 2024 KeePassXC Team <team@keepassxc.org>
  *  Copyright (C) 2010 Felix Geyer <debfx@fobos.de>
- *  Copyright (C) 2017 KeePassXC Team <team@keepassxc.org>
  *
  *  This program is free software: you can redistribute it and/or modify
  *  it under the terms of the GNU General Public License as published by
@@ -19,23 +19,21 @@
 #ifndef KEEPASSX_ENTRY_H
 #define KEEPASSX_ENTRY_H
 
-#include <QColor>
-#include <QImage>
 #include <QMap>
-#include <QPixmap>
 #include <QPointer>
-#include <QSet>
-#include <QUrl>
 #include <QUuid>
 
 #include "core/AutoTypeAssociations.h"
 #include "core/CustomData.h"
 #include "core/EntryAttachments.h"
 #include "core/EntryAttributes.h"
+#include "core/Global.h"
 #include "core/TimeInfo.h"
 
 class Database;
 class Group;
+class PasswordHealth;
+
 namespace Totp
 {
     struct Settings;
@@ -57,49 +55,52 @@ struct EntryData
 {
     int iconNumber;
     QUuid customIcon;
-    QColor foregroundColor;
-    QColor backgroundColor;
+    QString foregroundColor;
+    QString backgroundColor;
     QString overrideUrl;
-    QString tags;
+    QStringList tags;
     bool autoTypeEnabled;
     int autoTypeObfuscation;
     QString defaultAutoTypeSequence;
     TimeInfo timeInfo;
     QSharedPointer<Totp::Settings> totpSettings;
+    QSharedPointer<PasswordHealth> passwordHealth;
+    bool excludeFromReports;
+    QUuid previousParentGroupUuid;
 
     bool operator==(const EntryData& other) const;
     bool operator!=(const EntryData& other) const;
     bool equals(const EntryData& other, CompareItemOptions options) const;
 };
 
-class Entry : public QObject
+class Entry : public ModifiableObject
 {
     Q_OBJECT
 
 public:
     Entry();
-    ~Entry();
+    ~Entry() override;
     const QUuid& uuid() const;
     const QString uuidToHex() const;
-    QImage icon() const;
-    QPixmap iconPixmap() const;
-    QPixmap iconScaledPixmap() const;
     int iconNumber() const;
     const QUuid& iconUuid() const;
-    QColor foregroundColor() const;
-    QColor backgroundColor() const;
+    QString foregroundColor() const;
+    QString backgroundColor() const;
     QString overrideUrl() const;
     QString tags() const;
+    QStringList tagList() const;
     const TimeInfo& timeInfo() const;
     bool autoTypeEnabled() const;
+    bool groupAutoTypeEnabled() const;
     int autoTypeObfuscation() const;
     QString defaultAutoTypeSequence() const;
     QString effectiveAutoTypeSequence() const;
-    QString effectiveNewAutoTypeSequence() const;
+    QList<QString> autoTypeSequences(const QString& pattern = {}) const;
     AutoTypeAssociations* autoTypeAssociations();
     const AutoTypeAssociations* autoTypeAssociations() const;
     QString title() const;
     QString url() const;
+    QStringList getAllUrls() const;
     QString webUrl() const;
     QString displayUrl() const;
     QString username() const;
@@ -107,10 +108,24 @@ public:
     QString notes() const;
     QString attribute(const QString& key) const;
     QString totp() const;
+    QString totpSettingsString() const;
     QSharedPointer<Totp::Settings> totpSettings() const;
+    Group* previousParentGroup();
+    const Group* previousParentGroup() const;
+    QUuid previousParentGroupUuid() const;
+    int size() const;
+    QString path() const;
+    const QSharedPointer<PasswordHealth> passwordHealth();
+    const QSharedPointer<PasswordHealth> passwordHealth() const;
+    bool excludeFromReports() const;
+    void setExcludeFromReports(bool state);
+
+    bool hasPasskey() const;
+    void removePasskey();
 
     bool hasTotp() const;
     bool isExpired() const;
+    bool willExpireInDays(int days) const;
     bool isRecycled() const;
     bool isAttributeReference(const QString& key) const;
     bool isAttributeReferenceOf(const QString& key, const QUuid& uuid) const;
@@ -124,16 +139,11 @@ public:
     CustomData* customData();
     const CustomData* customData() const;
 
-    static const int DefaultIconNumber;
-    static const int ResolveMaximumDepth;
-    static const QString AutoTypeSequenceUsername;
-    static const QString AutoTypeSequencePassword;
-
     void setUuid(const QUuid& uuid);
     void setIcon(int iconNumber);
     void setIcon(const QUuid& uuid);
-    void setForegroundColor(const QColor& color);
-    void setBackgroundColor(const QColor& color);
+    void setForegroundColor(const QString& color);
+    void setBackgroundColor(const QString& color);
     void setOverrideUrl(const QString& url);
     void setTags(const QString& tags);
     void setTimeInfo(const TimeInfo& timeInfo);
@@ -149,10 +159,17 @@ public:
     void setExpires(const bool& value);
     void setExpiryTime(const QDateTime& dateTime);
     void setTotp(QSharedPointer<Totp::Settings> settings);
+    void setPreviousParentGroup(const Group* group);
+    void setPreviousParentGroupUuid(const QUuid& uuid);
+
+    void addTag(const QString& tag);
+    void removeTag(const QString& tag);
 
     QList<Entry*> historyItems();
     const QList<Entry*>& historyItems() const;
     void addHistoryItem(Entry* entry);
+    void setHistoryOwner(Entry* entry);
+    Entry* historyOwner() const;
     void removeHistoryItems(const QList<Entry*>& historyEntries);
     void truncateHistory();
 
@@ -164,6 +181,8 @@ public:
         CloneNewUuid = 1, // generate a random uuid for the clone
         CloneResetTimeInfo = 2, // set all TimeInfo attributes to the current time
         CloneIncludeHistory = 4, // clone the history items
+        CloneDefault = CloneNewUuid | CloneResetTimeInfo,
+        CloneCopy = CloneNewUuid | CloneResetTimeInfo | CloneIncludeHistory,
         CloneRenameTitle = 8, // add "-Clone" after the original title
         CloneUserAsRef = 16, // Add the user as a reference to the original entry
         ClonePassAsRef = 32, // Add the password as a reference to the original entry
@@ -191,8 +210,25 @@ public:
         UrlUserName,
         UrlPassword,
         Reference,
-        CustomAttribute
+        CustomAttribute,
+        DateTimeSimple,
+        DateTimeYear,
+        DateTimeMonth,
+        DateTimeDay,
+        DateTimeHour,
+        DateTimeMinute,
+        DateTimeSecond,
+        DateTimeUtcSimple,
+        DateTimeUtcYear,
+        DateTimeUtcMonth,
+        DateTimeUtcDay,
+        DateTimeUtcHour,
+        DateTimeUtcMinute,
+        DateTimeUtcSecond,
+        DbDir
     };
+
+    static const int DefaultIconNumber;
 
     /**
      * Creates a duplicate of this entry except that the returned entry isn't
@@ -200,13 +236,14 @@ public:
      * Note that you need to copy the custom icons manually when inserting the
      * new entry into another database.
      */
-    Entry* clone(CloneFlags flags) const;
+    Entry* clone(CloneFlags flags = CloneDefault) const;
     void copyDataFrom(const Entry* other);
     QString maskPasswordPlaceholders(const QString& str) const;
     Entry* resolveReference(const QString& str) const;
     QString resolveMultiplePlaceholders(const QString& str) const;
     QString resolvePlaceholder(const QString& str) const;
     QString resolveUrlPlaceholder(const QString& str, PlaceholderType placeholderType) const;
+    QString resolveDateTimePlaceholder(PlaceholderType placeholderType) const;
     PlaceholderType placeholderType(const QString& placeholder) const;
     QString resolveUrl(const QString& url) const;
 
@@ -217,9 +254,12 @@ public:
     void beginUpdate();
     bool endUpdate();
 
+    void moveUp();
+    void moveDown();
+
     Group* group();
     const Group* group() const;
-    void setGroup(Group* group);
+    void setGroup(Group* group, bool trackPrevious = true);
     const Database* database() const;
     Database* database();
 
@@ -231,7 +271,6 @@ signals:
      * Emitted when a default attribute has been changed.
      */
     void entryDataChanged(Entry* entry);
-    void entryModified();
 
 private slots:
     void emitDataChanged();
@@ -257,6 +296,7 @@ private:
     QPointer<AutoTypeAssociations> m_autoTypeAssociations;
     QPointer<CustomData> m_customData;
     QList<Entry*> m_history; // Items sorted from oldest to newest
+    QPointer<Entry> m_historyOwner;
 
     QScopedPointer<Entry> m_tmpHistoryItem;
     bool m_modifiedSinceBegin;
